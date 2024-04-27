@@ -1,0 +1,349 @@
+Resources:
+  WebAppVPC:
+    Type: 'AWS::EC2::VPC'
+    Description: 'Virtual private cloud of the entire resources'
+    Properties:
+      CidrBlock: '10.50.0.0/16'
+      Tags:
+        - Key: Name
+          Value: 'Web App VPC'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+
+  VpcGateway:
+    Description: 'The gateway for the traffic in and out of the VPC'
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: 'Vpc Gateway'
+
+  VpcGatewayAttachment:
+    Description: 'Attachment of the VPC gateway to the VPC'
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref WebAppVPC
+      InternetGatewayId: !Ref VpcGateway
+
+  PublicRouteTable:
+   Description: 'The public route table for the traffic'
+   Type: 'AWS::EC2::RouteTable'
+   Properties:
+    VpcId: !Ref WebAppVPC
+    Tags:
+      - Key: Name
+        Value: 'Public Route Table'
+
+  DefaultPublicRoute:
+    Description: 'Defining the default route for directing outbound traffic to the internet gateway'
+    Type: 'AWS::EC2::Route'
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      RouteTableId: !Ref PublicRouteTable
+      GatewayId: !Ref VpcGateway
+
+  PublicAsubnet:
+    Description: 'Public subnet in us-east-1a'
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: 'us-east-1a'
+      VpcId: !Ref WebAppVPC
+      CidrBlock: '10.50.10.0/24'
+      MapPublicIpOnLaunch: true
+      Tags:
+       - Key: Name
+         Value: 'Public A subnet'
+
+  AssociationRoutePublicA:
+    Description: 'Routing between public subnet A and Public Route Table'
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+     SubnetId: !Ref PublicAsubnet
+     RouteTableId: !Ref PublicRouteTable
+
+  PublicBsubnet:
+    Description: 'Public subnet in us-east-1b'
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      AvailabilityZone: 'us-east-1b'
+      CidrBlock: '10.50.20.0/24'
+      VpcId: !Ref WebAppVPC
+      MapPublicIpOnLaunch: true
+      Tags:
+       - Key: Name
+         Value: 'Public B subnet'
+
+  AssociationRoutePublicB:
+    Description: 'Routing between public subnet B and Public Route Table'
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+     SubnetId: !Ref PublicBsubnet
+     RouteTableId: !Ref PublicRouteTable
+
+  NatEIpSubnetA:
+    Description: 'Elastic IP used by us-east-1a NAT Gateway'
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: 'vpc'
+
+  NatGsubnetA:
+    Description: 'Gateway for us-east-1a private subnet accessing the internet'
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      SubnetId: !Ref PublicAsubnet
+      AllocationId: !GetAtt NatEIpSubnetA.AllocationId
+      Tags:
+        - Key: Name
+          Value: 'Nat Gateway for private subnet A'
+
+  PrivateRtA:
+   Description: 'Route table for private subnet A'
+   Type: 'AWS::EC2::RouteTable'
+   Properties:
+    VpcId: !Ref WebAppVPC
+    Tags:
+      - Key: Name
+        Value: 'Private Route Table A'
+
+  PrivateRouteSubnetA:
+    Description: 'Default route for directing traffic from us-east-1a private subnet to its NAT gateway'
+    Type: 'AWS::EC2::Route'
+    DependsOn: NatGsubnetA
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      RouteTableId: !Ref PrivateRtA
+      NatGatewayId: !Ref NatGsubnetA
+
+  PrivateAsubnet:
+    Description: 'Private subnet in us-east-1a'
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref WebAppVPC
+      CidrBlock: '10.50.80.0/24'
+      AvailabilityZone: 'us-east-1a'
+      Tags:
+       - Key: Name
+         Value: 'Private A subnet'
+
+  AssociationRoutePrivateA:
+   Description: 'Association between A subnet and its route table'
+   Type: 'AWS::EC2::SubnetRouteTableAssociation'
+   Properties:
+    SubnetId: !Ref PrivateAsubnet
+    RouteTableId: !Ref PrivateRtA
+
+  NatEIpSubnetB:
+    Description: 'Elastic IP used by us-east-1b NAT Gateway'
+    Type: 'AWS::EC2::EIP'
+    Properties:
+      Domain: 'vpc'
+
+  NatGsubnetB:
+    Description: 'Gateway for allowing us-east-1b private subnet access to the internet'
+    Type: 'AWS::EC2::NatGateway'
+    Properties:
+      SubnetId: !Ref PublicBsubnet
+      AllocationId: !GetAtt NatEIpSubnetB.AllocationId
+      Tags:
+        - Key: Name
+          Value: 'Nat Gateway for private subnet B'
+
+  PrivateRtB:
+   Description: 'Route table for private subnet B'
+   Type: 'AWS::EC2::RouteTable'
+   Properties:
+    VpcId: !Ref WebAppVPC
+    Tags:
+      - Key: Name
+        Value: 'Private Route Table B'
+
+  PrivateRouteSubnetB:
+    Description: 'Default route for directing traffic from private subnets to the NAT gateway'
+    Type: 'AWS::EC2::Route'
+    DependsOn: NatGsubnetB
+    Properties:
+      DestinationCidrBlock: '0.0.0.0/0'
+      RouteTableId: !Ref PrivateRtB
+      NatGatewayId: !Ref NatGsubnetB
+
+  PrivateBsubnet:
+    Description: 'Private subnet in us-east-1b'
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref WebAppVPC
+      CidrBlock: '10.50.90.0/24'
+      AvailabilityZone: 'us-east-1b'
+      Tags:
+       - Key: Name
+         Value: 'Private B subnet'
+
+  AssociationRoutePrivateB:
+   Description: 'Association between B subnet and its route table'
+   Type: 'AWS::EC2::SubnetRouteTableAssociation'
+   Properties:
+    SubnetId: !Ref PrivateBsubnet
+    RouteTableId: !Ref PrivateRtB
+
+  HTTPsecuritygroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupName: "HTTP-sg"
+      GroupDescription: "Allow all HTTP traffic and SSH exception"
+      VpcId: !Ref WebAppVPC
+      Tags:
+      - Key: Name
+        Value: "HTTP Security Group"
+      SecurityGroupIngress:
+      - CidrIp: '0.0.0.0/0'
+        FromPort: '80'
+        ToPort: '80'
+        IpProtocol: tcp
+      - SourceSecurityGroupId: !GetAtt SSHsecuritygroup.GroupId
+        FromPort: '22'
+        ToPort: '22'
+        IpProtocol: tcp
+
+  SSHsecuritygroup:
+   Type: "AWS::EC2::SecurityGroup"
+   Properties:
+    GroupName: "SSH-sg"
+    GroupDescription: "Allow SSH traffic"
+    VpcId: !Ref WebAppVPC
+    Tags:
+    - Key: Name
+      Value: "SSH security group"
+    SecurityGroupIngress:
+    - CidrIp: '0.0.0.0/0'
+      FromPort: '22'
+      ToPort: '22'
+      IpProtocol: tcp
+
+  BastionServer:
+   Type: 'AWS::EC2::Instance'
+   Description: 'Instance for connecting to the private subnets'
+   Properties:
+    SubnetId: !Ref PublicAsubnet
+    ImageId: !Ref LatestAMI
+    InstanceType: 't2.micro'
+    KeyName: 'deploykey'
+    SecurityGroupIds:
+      - !Ref SSHsecuritygroup
+    Tags:
+      - Key: Name
+        Value: 'Bastion Server'
+
+  PublicLoadBalancer:
+   Description: 'Elastic load balancer for distributing the web traffic'
+   Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+   Properties:
+    Subnets:
+      - !Ref PublicAsubnet
+      - !Ref PublicBsubnet
+    SecurityGroups:
+      - !Ref HTTPsecuritygroup
+    Name: 'Public-LB'
+    Scheme: internet-facing
+
+  TargetGroup:
+    Description: 'Target group definitions on the load balancer checks'
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    DependsOn: PublicLoadBalancer
+    Properties:
+      HealthCheckEnabled: yes
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 3
+      Name: 'TargetGroup'
+      Port: '80'
+      Protocol: 'HTTP'
+      VpcId: !Ref WebAppVPC
+
+  WebAppListener:
+    Description: 'Configuration of listeners for the load balancer to the target group'
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref PublicLoadBalancer
+      Port: 80
+      Protocol: HTTP
+
+
+  WebserverLaunchConfiguration:
+    Description: 'Configuration for the webservers part of the autoscaling group'
+    Type: "AWS::AutoScaling::LaunchConfiguration"
+    Properties:
+     ImageId: !Ref LatestAMI
+     InstanceType: 't2.micro'
+     KeyName: 'deploykey'
+     SecurityGroups:
+        - !Ref HTTPsecuritygroup
+     UserData:
+        Fn::Base64: !Sub |
+         #!/bin/bash
+          sudo dnf -y update
+          sudo dnf install -y httpd php git
+          sudo systemctl enable httpd
+          sudo systemctl start httpd
+          sudo git clone https://github.com/ionutbutnaru19/projectdeploy.git /var/www/html/
+
+  WebAppAutoScalingGroup:
+    Description: 'Configuration of the number of instances in the autoscaling group'
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    Properties:
+      LaunchConfigurationName: !Ref WebserverLaunchConfiguration
+      MinSize: 2
+      MaxSize: 4
+      DesiredCapacity: 2
+      VPCZoneIdentifier:
+        - !Ref PrivateAsubnet
+        - !Ref PrivateBsubnet
+      TargetGroupARNs:
+        - !Ref TargetGroup
+      HealthCheckType: ELB
+      HealthCheckGracePeriod: 60
+
+  AutoScalingAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: 'Scaling in or out based on average CPU utilization'
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref WebAppAutoScalingGroup
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 25
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - !Ref ScalingOutPolicy
+      OKActions:
+        - !Ref ScalingInPolicy
+
+  ScalingOutPolicy:
+    Description: 'Policy to scale out in response to increase load'
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebAppAutoScalingGroup
+      Cooldown: 60
+      ScalingAdjustment: 1
+
+  ScalingInPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Description: 'Policy to scale out in response to decreased load'
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref WebAppAutoScalingGroup
+      Cooldown: 60
+      ScalingAdjustment: -1
+
+
+Parameters:
+  LatestAMI:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/al2023-ami-minimal-kernel-default-x86_64'
