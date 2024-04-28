@@ -1,0 +1,48 @@
+- name: Localhost index file checksum value
+  hosts: localhost
+  tasks:
+    - name: Get file checksum value from localhost
+      ansible.builtin.shell: "sha256sum ~/index.php | cut -d' ' -f1"
+      register: local_checksum
+    - name: Write local checksum value to a file
+      ansible.builtin.copy:
+        content: "{{ local_checksum.stdout }}"
+        dest: "/tmp/local_checksum_value.txt"
+    - name: Print checksum value on localhost
+      ansible.builtin.debug:
+        msg: "Checksum value of the file on localhost is {{ local_checksum.stdout }}"
+
+- name: Check index file checksum value from webservers and take appropriate actions
+  hosts: webservers
+  become: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  tasks:
+    - name: Read local checksum value from file
+      ansible.builtin.shell: "cat /tmp/local_checksum_value.txt"
+      register: local_checksum_value_file
+      delegate_to: localhost
+
+    - name: Get checksum value of the index file on webservers
+      ansible.builtin.shell: "sha256sum /var/www/html/index.php | cut -d' ' -f1"
+      register: checksum_output
+
+    - name: Print checksum value of file from webservers
+      ansible.builtin.debug:
+        msg: "Checksum value of the file on {{ inventory_hostname }} is {{ checksum_output.stdout }}"
+
+    - name: Copy new index file to web servers if checksum values are different
+      ansible.builtin.copy:
+        src: "~/index.php"
+        dest: "/var/www/html/index.php"
+      when: local_checksum_value_file.stdout != checksum_output.stdout
+
+    - name: Debug message for copied file
+      ansible.builtin.debug:
+        msg: "File copied to web server because checksum values were different. Condition: {{ local_checksum_value_file.stdout }} != {{ checksum_output.stdout }}"
+      when: local_checksum_value_file.stdout != checksum_output.stdout
+
+    - name: Debug message for identical files
+      ansible.builtin.debug:
+        msg: "Files are identical. No copy needed. Condition: {{ local_checksum_value_file.stdout }} == {{ checksum_output.stdout }}"
+      when: local_checksum_value_file.stdout == checksum_output.stdout

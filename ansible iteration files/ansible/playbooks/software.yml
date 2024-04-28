@@ -1,0 +1,16 @@
+- name: Update and install software
+  hosts: webservers
+  become: yes
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
+  tasks:
+    - name: Update software to latest version
+      ansible.builtin.dnf:
+        name: '*'
+        state: latest
+
+    - name: Install stress-ng
+      ansible.builtin.dnf:
+        name: stress-ng
+        state: present
